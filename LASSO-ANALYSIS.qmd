@@ -1,0 +1,202 @@
+---
+author: 
+   name: "Abdur Raheem Mohammed"
+date: "2024-02-23"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.70in
+          - bottom=1in
+          - right=0.70in
+        include-in-header: 
+          text: 
+            \usepackage{amsmath}
+editor: source
+---
+
+
+```{r}
+# (A)
+# Install glmnet and its dependencies including shape
+#install.packages("glmnet", dependencies = TRUE)
+library(glmnet)
+# Read the data
+cpillar.df <- readRDS("hw2.RDS")
+
+# Define predictors (X) and response variable (y)
+X <- as.matrix(cpillar.df[, -1])  # Exclude the first column (response variable)
+y <- cpillar.df[, 1]  # First column is the response variable
+
+# Set up grid of lambdas
+lgrid <- exp(seq(-0.5, -6, length = 100))
+
+# Set random number seed
+set.seed(20500 + 5150)
+
+# Perform LASSO regression with cross-validation
+lasso_fit <- cv.glmnet(X, y, alpha = 1, lambda = lgrid, nfolds = 8)
+
+# Print the cross-validation results
+lasso_fit
+
+```
+
+
+```{r}
+# (B)
+# Extract the best lambda value from cross-validation
+best_lambda <- lasso_fit$lambda.min
+
+# Obtain the best model corresponding to the best lambda
+best_model <- glmnet(X, y, alpha = 1, lambda = best_lambda)
+
+# Extract coefficients of the best model
+coefficients <- coef(best_model)
+
+# Print the coefficients
+print(coefficients)
+
+# Get the cross-validation MSE value
+cv_mse <- min(lasso_fit$cvm)
+
+# Print the best lambda and cross-validation MSE value
+print(paste("Best lambda:", best_lambda))
+print(paste("Cross-validation MSE value:", cv_mse))
+
+
+```
+
+```{r}
+# (C)
+# Extract the lambda value corresponding to 1 standard error rule
+lambda_1se <- lasso_fit$lambda.1se
+
+# Obtain the 1-SE rule model
+model_1se <- glmnet(X, y, alpha = 1, lambda = lambda_1se)
+
+# Extract coefficients of the 1-SE rule model
+coefficients_1se <- coef(model_1se)
+
+# Print the coefficients
+print(coefficients_1se)
+
+# Get the cross-validation MSE value for the 1-SE rule model
+#cv_mse_1se <- lasso_fit$cvm[which.min(lasso_fit$lambda == lambda_1se)]
+cv_mse_1se <- lasso_fit$cvm[which(lasso_fit$lambda == lambda_1se)]
+
+
+
+# Print the regularization value (lambda) and cross-validation MSE value for the 1-SE rule model
+print(paste("Regularization value (lambda) for 1-SE rule model:", lambda_1se))
+print(paste("Cross-validation MSE value for 1-SE rule model:", cv_mse_1se))
+
+```
+
+```{r}
+# (D)
+# Plot the typical criterion vs. complexity
+plot(lasso_fit)
+
+
+
+```
+
+
+
+
+```{r} 
+
+# (E)
+par(mar = c(5, 4, 4, 2) + 0.9)  
+  # Plot the typical criterion vs. complexity
+plot(lasso_fit)
+
+# Add points for the best model and 1-SE model
+points(log(lasso_fit$lambda.min), min(lasso_fit$cvm), col = "red", pch = 19)  # Best model
+points(log(lasso_fit$lambda.1se), lasso_fit$cvm[which.min(lasso_fit$lambda == lasso_fit$lambda.1se)], col = "blue", pch = 19)  # 1-SE model
+
+# Add legend
+legend("topright", legend = c("Best model", "1-SE model"), col = c("red", "blue"), pch = 19)
+
+title <- "Typical Criterion vs. Complexity Plot"
+title(main = title)
+
+
+
+###
+```
+
+```{r}
+# EXTRA CREDIT 
+
+
+# Define the number of folds K in CV(K)
+K <- 8
+
+# Randomize (i.e., shuffle) the case order before doing CV
+set.seed(8675309)
+indices <- sample(1:nrow(cpillar.df))
+
+# Partition cases into K subsets (or 'folds')
+folds <- cut(indices, breaks = K, labels = FALSE)
+
+# Create objects to hold metrics
+all_xtrain_mse <- NULL
+all_xval_mse <- NULL
+
+# Fit/predict for K folds
+for (i in 1:K) {
+  cat("processing fold #", i, "\n")
+  
+  # Prepare the training data from remaining folds not i
+  xtrain_data <- cpillar.df[-indices[folds == i], ]
+  xtrain_X <- as.matrix(xtrain_data[, -1])
+  xtrain_y <- xtrain_data[, 1]  # outputs
+  
+  # Prepare the (cross-)validation data from fold i
+  xval_indices <- which(folds == i)
+  xval_data <- cpillar.df[xval_indices, ]
+  xval_X <- as.matrix(xval_data[, -1])
+  xval_y <- xval_data[, 1]
+  
+  # Training fit and training MSE for all models
+  c.xtrain.lasso <- glmnet(x = xtrain_X, y = xtrain_y,
+                           family = "gaussian",  # default
+                           alpha = 1,  # lasso
+                           lambda = lgrid)  # else chosen internally
+  
+  xtrainpred <- predict(c.xtrain.lasso, newx = xtrain_X, s = lgrid)
+  foldtrain_mse <- apply(xtrainpred, 2, FUN = function(yhat, y) {
+    mean((y - yhat)^2)
+  }, y = xtrain_y)
+  
+  # xValidation MSE for all models
+  xvalpred <- predict(c.xtrain.lasso, newx = xval_X, s = lgrid)
+  foldval_mse <- apply(xvalpred, 2, FUN = function(yhat, y) {
+    mean((y - yhat)^2)
+  }, y = xval_y)
+  
+  # Collect fold MSEs
+  all_xtrain_mse <- rbind(all_xtrain_mse, foldtrain_mse)
+  all_xval_mse <- rbind(all_xval_mse, foldval_mse)
+}
+
+# Average the MSE over the K folds
+xtrain_mse <- apply(all_xtrain_mse, 2, mean)
+xval_mse <- apply(all_xval_mse, 2, mean)
+
+# Plot the results
+plot(y = as.vector(xval_mse), x = -log(lgrid),
+     type = "l", col = "darkgreen", ylim = c(0.2, 0.65),
+     ylab = "Mean-Squared Error",
+     xlab = "-Log(lambda)")
+lines(y = as.vector(xtrain_mse), x = -log(lgrid),
+      col = "red")
+legend("topright", legend = c("xval", "train"),
+       col = c("darkgreen", "red"), lty = c(1, 1), title = "MSE")
+
+```
+
