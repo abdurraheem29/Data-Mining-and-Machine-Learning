@@ -1,0 +1,152 @@
+---
+author: 
+   name: "Abdur Raheem Mohammed"
+date: "2024-4-3"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.75in
+          - bottom=1in
+          - right=0.70in
+        include-in-header: 
+          text: 
+            \usepackage{amsmath}
+editor: source
+---
+
+```{r}
+ #preparing the fossil dataset and plotting the data
+library(SemiPar)
+library(splines)
+library(mgcv)
+library(locfit)
+data(fossil)
+names(fossil) <-c("age","Sr.rat")
+ 
+plot(Sr.rat ~ age, data=fossil)
+detach(package:SemiPar)
+
+```
+In Question 1, we employ the mgcv package to construct penalized Thin Plate Regression Splines (TPRS), selecting k=5 and k=10 for the basis functions. This procedure is aimed at assessing whether the model with k=5 basis functions is sufficiently comprehensive.
+```{r}
+#Answer 1-1 ,  k=5
+gammod1 <- gam(Sr.rat ~ s(x=age, k=5, bs="tp"), data = fossil)
+plot(gammod1, residuals=TRUE)
+summary(gammod1)$sp.criterion
+```
+```{r}
+#Answer 1-2, k=10
+gammod2 <- gam(Sr.rat ~ s(x=age, k=10, bs="tp"), data =fossil)
+plot(gammod2, residuals = TRUE)
+summary(gammod2)$sp.criterion
+```
+The plots show that using k=10 fits the data better than k=5 because  error decreases, as seen in the GCV.CP values. This means k=10 is better for our data, but we might still need to check if there's an even better value for k.
+
+
+2-Now we use the gam.check function on the models with k=5 and k=10. This can help evaluate if the chosen number of basis functions in each model is appropriate.
+```{r}
+#Answer 2
+check_gam1<-gam.check(gammod1)
+
+check_gam2<-gam.check(gammod2)
+```
+Using gam.check, we found that k=5 gives a p-value of <2e-16 and a k-index of 0.6, indicating it might be too low. For k=10, the p-value improved to 0.24 and the k-index is close to 1 at 0.94, showing a better fit. 
+
+
+3-We fit a Thin Plate Regression Spline (TPRS) using k=20 basis functions and then apply the gam.check function
+```{r}
+#Answer 3
+
+gammod3 <- gam(Sr.rat ~ s(x=age, k=20, bs="tp"), data =fossil)
+plot(gammod3,residuals = TRUE)
+summary(gammod3)$sp.criterion
+
+check_gam3<-gam.check(gammod3)
+```
+Since k=20 gives us a k-index of 1.04, we can use this value to do more data analysis because k is sufficiently large.
+
+4- obtain a 95% interval for the strontium ratio at age=110 and indicate the value of the mean $\hat\mu(x)$ over the range of ages in the data, as well as the confidence interval for the mean and prediction
+```{r}
+#Answer 4
+
+(pred1<- predict(gammod3, newdata = data.frame(age=110),se.fit=TRUE))
+se1<-pred1$se.fit
+sig2<-summary(gammod3)$scale
+edf<-df.residual(gammod3)
+
+tmult<-qt(p=1-0.05/2, df=edf)
+
+#95% confidence interval
+lb1c<-unname(pred1$fit-tmult*se1)
+ub1c<-unname(pred1$fit+tmult*se1)
+c("0.025"=lb1c,"0.975"=ub1c)
+
+#95% prediction interval
+(sepred1<-sqrt(sig2+se1^2))
+
+lb1p<-unname(pred1$fit-tmult*sepred1)
+ub1p<-unname(pred1$fit+tmult*sepred1)
+c("0.025"=lb1p,"0.975"=ub1p)
+  
+#predicting on grid within fossil age range
+xgrid<-data.frame(age=seq(min(fossil$age),max(fossil$age), by=1))
+predgrid<-predict(gammod3,xgrid,se.fit=TRUE)
+segrid<-predgrid$se.fit
+
+#Creating the plot
+plot(Sr.rat ~age, data = fossil,col="grey")
+lines(xgrid$age,predgrid$fit)
+points(110,pred1$fit, col="red", pch=20)
+arrows(110,lb1c,110,ub1c,angle=90,code=3,col="red",length=0.05)
+arrows(110,lb1p,110,ub1p,angle=90,code=3, col="red", length=0.05,lty=3)
+
+```
+Our estimated mean $\hat{\mu}(x)$ is shown in the plot as a solid line. The solid red arrows point to the mean's $95%$ Confidence Interval, which is between 0.7073230 ($2.5%$) and 0.7073493 ($97.5%$). Furthermore, the dotted red arrows indicate the $95%$ Prediction Interval, which spans from 0.7072846 ($2.5%$) to 0.7073877 ($97.5%$).
+
+5. To fit a locally linear regression model, we use the locfit library and the tri-cube smoothing kernel only option in gcv.plot.
+```{r}
+#Answer5
+gcv1<-gcvplot(Sr.rat~age,kern="tcub",alpha=seq(0.05, 0.65, by=.01),deg=1, ev=dat(cv=FALSE), data = fossil)
+plot(gcv1)
+lines(gcv1$df, gcv1$values, lty=1)
+gcv1$df[which.min(gcv1$values)]
+
+
+```
+
+
+From findings, the minimum GCV value occurs at  18.9458 degrees of freedom.
+
+6.We determine a 95% interval for the $St. Rat$ at input age=110 using the locfit results mentioned above, and we also show the value of $\hat\mu(x)$ over the range of ages in the data.
+```{r}
+#Answer 6
+locfit1<-locfit(Sr.rat~age,kern="tcub",deg=1,alpha=gcv1$alpha[which.min(gcv1$values)], data = fossil)
+gcv1$df[which.min(gcv1$values)]
+(pred2<- predict(locfit1, newdata = data.frame(age=110),se.fit=TRUE,band="local"))
+se2<-pred2$se.fit
+crit<-(locfit1)$crit.val
+
+#95% confidence interval
+lb2c<-unname(pred2$fit-crit(locfit1)$crit.val*se2)
+ub2c<-unname(pred2$fit+crit(locfit1)$crit.val*se2)
+c("0.025"=lb2c, "0.975"=ub2c)
+
+(pred3<- predict(locfit1, newdata = data.frame(age=110),se.fit=TRUE,band="global"))
+(sepred2<-pred3$se.fit)
+
+#95% prediction interval 
+lb2p<-unname(pred3$fit-crit(locfit1)$crit.val*sepred2)
+ub2p<-unname(pred3$fit+crit(locfit1)$crit.val*sepred2)
+c("0.025"=lb2p, "0.975"=ub2p)
+
+#Creating the plot
+plot(Sr.rat ~age, data = fossil, col="grey")
+plot(locfit1,add=TRUE,lty=2)
+points(110,pred2$fit, col="red", pch=20)
+arrows(110,lb2c,110,ub2c,angle=90,code=3,col="red",length=0.05)
+arrows(110,lb2p,110,ub2p,angle=90,code=3, col="red", length=0.05,lty=3)
+```
+The dashed line shows the estimated strontium ratio trend over age. At 110 million years, the 95% confidence interval for the mean ratio is marked by the solid red arrow (0.7073240 to 0.7073475), and the prediction interval for a new measurement is shown by dotted red arrows (0.7073188 to 0.7073527).
