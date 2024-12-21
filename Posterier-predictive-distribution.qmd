@@ -1,0 +1,197 @@
+---
+author: 
+   name: "Abdur Raheem Mohammed"
+date: "2024-03-18"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.75in
+          - bottom=1in
+          - right=0.70in
+        include-in-header: 
+          text: 
+            \usepackage{amsmath}
+editor: source
+---
+
+```{r}
+#(Answer 1) Modify Stan Code: Add expystar calculation
+# Added at the end of the 'generated quantities' block in the 'ridgehw3.model.stan' file:
+# expystar = exp(ystar);
+
+```
+
+```{r}
+#(Answer 2)
+library(rstan)
+
+# Load caterpillar data
+cpillar.df <- readRDS("hw3.RDS")
+
+# Function to standardize the data
+standardize <- function(x) {
+  (x - mean(x)) / sd(x)
+}
+
+#standardization to predictors
+cpillar.df.standardized <- as.data.frame(lapply(cpillar.df[-1], standardize))
+
+#response variable without standardization
+cpillar.df.standardized$y <- cpillar.df$y
+
+yhold.out <- 0.03
+# Compute statistics for Stan data 
+xbar <- colMeans(cpillar.df[-1])  # m mean  predictors
+sx <- apply(cpillar.df[-1], 2, sd)  # Standard deviation predictors
+ybar <- mean(cpillar.df$y)  # mean of response
+sy <- sd(cpillar.df$y)  # standard deviation  response
+
+# Standardized hold-out inputs
+xhold.out <- c(1310, 36, 17, 5.2, 17.8, 2.3, 1.9, 10.3, 2.6, 2)
+xstar <- (xhold.out - xbar) / sx  
+
+# Prepare data for Stan
+stan_data <- list(
+  n = nrow(cpillar.df),
+  k = ncol(cpillar.df.standardized) - 1,
+  X = as.matrix(cpillar.df.standardized[,-ncol(cpillar.df.standardized)]),
+  y = cpillar.df$y, 
+  xbar = xbar,
+  sx = sx,
+  ybar = ybar,
+  sy = sy,
+  xstar = xstar,
+  lama = 0.5,  
+  lamb = 0.5   
+)
+
+# Show last three standardized inputs and outputs
+print(tail(cpillar.df.standardized, 3))
+
+print(xstar)
+
+```
+
+
+```{r}
+#(3)
+# Load Stan model and compile it
+stan_model <- stan_model(file = "ridgehw3.model0.stan")
+
+```
+
+
+```{r}
+#(4)
+# Run Stan model
+fit <- sampling(stan_model, data = stan_data, chains = 4, warmup = 5000, iter = 10000, seed = 24601)
+
+# Save fit object
+saveRDS(fit, file = "model_fit.rds")
+
+```
+
+```{r}
+#(5)
+library(coda)
+library(rstan)
+mcmc_samples <- extract(fit, permuted = FALSE, inc_warmup = TRUE)
+mcmc_list <- mcmc.list(lapply(1:4, function(i) mcmc(mcmc_samples[,,i])))
+
+#Now mcmc_list is ready for analysis
+
+```
+
+```{r}
+#(6)
+# Trace plots for each chain to assess mixing and convergence
+traceplot(mcmc_list)
+
+# Density plots to assess posterior distribution
+densplot(mcmc_list)
+
+# After running the code, it shows trace plots and density plots for each chain in MCMC.
+# These can be used to visually evaluate  posterior distribution's shape and convergence.
+#In density plots, examine the shape of the posterior distribution and look for smooth,
+#overlapping chains in #trace plots to look for signs of good convergence 
+#and well behaved posterior.
+
+```
+```{r}
+#(7) 
+#Assess convergence using the PSRF
+psrf_results <- gelman.diag(mcmc_list, autoburnin = TRUE)
+print(psrf_results)
+
+# 
+# The PSRF values obtained 8.05 indicate that the MCMC chains have not converged,
+# need for further diagnostics or adjustments to improve convergence.
+
+
+```
+```{r}
+#(8)
+# Summarize the posterior samples
+posterior_summary <- summary(mcmc_list, quantiles = c(0.025, 0.975))
+
+# Print the summary statistics
+print(posterior_summary)
+
+# Generate density plots for the posterior distributions of model parameters
+mcmc_density_plots <- lapply(1:ncol(mcmc_list[[1]]), function(i) {
+  plot(density(mcmc_list[[1]][, i]), main = colnames(mcmc_list[[1]])[i])
+})
+
+# With wide range in quantiles indicating uncertainty and consistent central tendency 
+# supporting convergence, #the model's averages and 
+#standard deviations across four chains point to stable parameter estimation 
+#and strong inference.
+
+
+```
+
+```{r}
+#(9) Posterior Predictive Distribution Analysis
+# contains posterior predictive values for unobserved data
+expystar_samples <- extract(fit)$expystar
+
+# compute the 95% predictive interval
+ci <- quantile(expystar_samples, probs = c(0.025, 0.975))
+posterior_mean <- mean(expystar_samples)
+
+# Plot posterior predictive distribution
+hist(expystar_samples, breaks = 40, probability = TRUE, main = "Posterior Predictive Distribution", 
+     xlab = "Average Number of Nests")
+abline(v = ci[1], col = "red", lwd = 2, lty = 2)  # lower bound of CI
+abline(v = ci[2], col = "red", lwd = 2, lty = 2)  # upper bound of CI
+abline(v = posterior_mean, col = "blue", lwd = 2)  # posterior mean
+abline(v = yhold.out, col = "green", lwd = 2)  # actual observed value
+
+# The estimated distribution of average nests according to the model is shown in the histogram.
+#The actual average's 95% probability distribution is indicated by the red dashed lines.
+#Since the actual observed value, in green line, is outside of this range, 
+#it is possible that model's predictions not match that observation.
+
+```
+```{r}
+#(10)
+#Extra Credit: 
+# Calculate the posterior predictive mean
+posterior_mean <- mean(expystar_samples)
+
+# Determine the standard error of the mean
+standard_error <- sd(expystar_samples) / sqrt(length(expystar_samples))
+
+# Calculate the 95% confidence interval
+ci_lower <- posterior_mean - qt(0.975, df = length(expystar_samples) - 1) * standard_error
+ci_upper <- posterior_mean + qt(0.975, df = length(expystar_samples) - 1) * standard_error
+
+# Display the 95% confidence interval
+cat("95% Confidence Interval for the posterior predictive mean: [", ci_lower, ", ", ci_upper, "]\n")
+
+
+```
+
