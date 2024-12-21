@@ -1,3 +1,4 @@
+# Data-Mining-and-Machine-Learning
 Key Tasks
 1. Subset Selection
 Task: How many different possible subsets of inputs (including the empty subset) can be used for prediction?
@@ -55,4 +56,4 @@ The best subsets algorithm was applied using the leaps::regsubsets function. For
 Validation Approach
 For the validation set approach, the training data was used to fit all possible models. The performance was evaluated based on training MSE and validation MSE. Models were plotted for both metrics to identify the best subset of features.
 
-# Data-Mining-and-Machine-Learning
+
