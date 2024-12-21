@@ -1,0 +1,180 @@
+---
+author: "Abdur Raheem Mohammed"
+date: "2024-04-19"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.75in
+          - bottom=1in
+          - right=0.70in
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r}
+wbca <- faraway::wbca
+str(wbca)
+```
+1(A)
+```{r}
+# Load the faraway package if not already loaded
+if (!require(faraway, quietly = TRUE)) {
+    install.packages("faraway")
+    library(faraway)
+}
+
+# Load the Wisconsin breast cancer data
+data("wbca", package = "faraway")
+
+# Convert Class from integer to factor with appropriate labels
+wbca$Class <- factor(wbca$Class, levels = c(0, 1), labels = c("neg", "pos"))
+
+# Verify the change using the levels() function
+levels(wbca$Class)
+```
+
+
+1(B)
+```{r}
+# Load data if not already done
+library(faraway)
+data("wbca", package = "faraway")
+
+# Convert Class to factor with "neg" and "pos" levels
+wbca$Class <- factor(wbca$Class, levels = c(0, 1), labels = c("neg", "pos"))
+
+# Convert BNucl to a factor (if not done already or reassurance it's set properly)
+wbca$BNucl <- factor(wbca$BNucl)
+
+# Using spineplot with the correct formula interface
+spineplot(Class ~ BNucl, data = wbca, 
+          main = "Spinogram of Class vs BNucl",
+          xlab = "BNucl (Bare Nuclei)",
+          ylab = "Class Distribution")
+```
+
+1(C)
+```{r}
+#  Based on the spinogram the probability of $P({BNucl\leq}2)$ appears relatively small?
+
+# ANS : This is False. Based on the spinogram the probability is high not small.
+
+```
+
+1(D)
+```{r}
+# Based on the spinogram, TRUE or FALSE: The probability P (Class = 1 | BN ucl ≤2) appears relatively large.
+
+# ANS : Based on the spinogram above this is True
+```
+
+
+2
+```{r}
+if (!require(randomForest)) {
+  install.packages("randomForest", dependencies = TRUE)
+  library(randomForest)
+}
+# Set seed for reproducibility
+set.seed(8675309)
+
+# Assuming the wbca dataset is already loaded and prepared
+data("wbca", package = "faraway")
+wbca$Class <- factor(wbca$Class, levels = c(0, 1), labels = c("neg", "pos"))
+# Number of predictors
+num_predictors <- ncol(wbca) - 1  # exclude the response variable Class
+
+# Store OOB error rates
+oob_error_rates <- matrix(NA, nrow = num_predictors, ncol = 2000)
+
+# Iterate over possible mtry values
+for (m in 1:num_predictors) {
+  rf_model <- randomForest(Class ~ ., data = wbca, mtry = m, ntree = 2000)
+  oob_error_rates[m,] <- rf_model$err.rate[, "OOB"]
+}
+# Set up a plot
+plot(1:2000, oob_error_rates[1,], type = "l", col = 1, ylim = range(oob_error_rates),
+     xlab = "Number of Trees", ylab = "OOB Error Rate",
+     main = "OOB Error Rate vs. Number of Trees for Different mtry Values")
+
+# Add lines for each mtry
+colors <- rainbow(num_predictors)
+for (m in 2:num_predictors) {
+  lines(1:2000, oob_error_rates[m,], col = colors[m - 1])
+}
+
+# Add a legend
+legend("topright", legend = paste("mtry =", 1:num_predictors), col = colors, lty = 1)
+```
+
+
+3(A)
+```{r}
+library(randomForest)
+# Set seed for reproducibility
+set.seed(8675309)
+
+# fit the random forest model
+rf_model <- randomForest(Class ~ ., data = wbca, ntree = 2000, mtry = 2)
+
+# predict the OOB class probabilities
+probs <- predict(rf_model, type = "prob")
+
+# show the class probabilities for the first six cases and last six cases
+head(probs, 6)
+tail(probs, 6)
+probs[4, "pos"]
+```
+
+3(B)
+```{r}
+bayes_class <- probs > 0.5
+# Print Bayes classifications for first six and last six cases
+head(bayes_class, 6)
+tail(bayes_class, 6)
+
+#   In computing the Bayes classifications using the OOB probabilities, we apply a simple decision rule: classify as "pos" if the probability of being positive exceeds 0.5; otherwise, classify as "neg". This decision rule, while not explicitly using Bayes' theorem, aligns with Bayesian decision theory under equal loss assumption. It aims to minimize expected loss by selecting the class with the highest posterior probability. Thus, we're effectively implementing a Bayesian decision rule based on the estimated probabilities provided by the random forest model.
+
+```
+3(C)
+```{r}
+probs1 <- predict(rf_model, type = "class")
+(wbcatraintab<- table("obs"=wbca$Class, "pred"=probs1))
+```
+
+3(D)
+```{r}
+sum(diag(wbcatraintab)) / sum(wbcatraintab)
+```
+3(E)
+```{r}
+1-sum(diag(wbcatraintab)) / sum(wbcatraintab)
+```
+
+
+3(F)
+```{r}
+each_class= diag(wbcatraintab) / rowSums(wbcatraintab);each_class
+```
+3(G)
+```{r}
+miss_each_class = 1-each_class;miss_each_class
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
