@@ -1,0 +1,164 @@
+---
+author: "Abdur Raheem Mohammed"
+date: "2024-04-19"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.75in
+          - bottom=1in
+          - right=0.70in
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+
+```{r}
+load(file = "ozone.RData")
+
+## put histograms on the diagonal
+panel.hist <- function(x, ...) {
+  usr <- par("usr")
+  on.exit(par("usr" = usr))
+  par(usr = c(usr[1:2], 0, 1.5))
+  h <- hist(x, plot = FALSE)
+  breaks <- h$breaks
+  nB <- length(breaks)
+  y <- h$counts
+  y <- y/max(y)
+  rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+}
+
+## put (absolute) correlations on the lower panels,
+## with size proportional to the correlations.
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
+  usr <- par("usr")
+  on.exit(par("usr" = usr))
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if (missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+## Now plot it!
+pairs(O3 ~ ., data = ozone.df, 
+      upper.panel = panel.smooth,
+      lower.panel = panel.cor, 
+      diag.panel = panel.hist)
+
+```
+
+```{r}
+(1)
+# Set the random seed
+library(randomForest)
+library(rpart)
+set.seed(24601 + 5150)
+treemod <- rpart(O3 ~ ., data=ozone.df, method="anova",
+control=list(minsplit=6, minbucket=3, cp=0.0))
+bagmod <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=9)
+RFmod8 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=8)
+RFmod7 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=7)
+RFmod6 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=6)
+RFmod5 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=5)
+RFmod4 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=4)
+RFmod3 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=3)
+RFmod2 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=2)
+RFmod1 <- randomForest(O3 ~ ., data=ozone.df, importance=TRUE,
+type="regression", mtry=1)
+{plot(RFmod1, col="green", ylim=c(15, 20), main="Generalization Error")
+plot(RFmod2, col="blue", add=TRUE)
+plot(RFmod3, col="yellow", add=TRUE)
+plot(RFmod4, col="cyan", add=TRUE)
+plot(RFmod5, col="red", add=TRUE)
+plot(RFmod6, col="purple", add=TRUE)
+plot(RFmod7, col="orange", add=TRUE)
+plot(RFmod8, col="beige", add=TRUE)
+plot(bagmod, col="hotpink", add=TRUE)
+besttreecv10 <- min(treemod$cptable[,"xerror"])
+besttreecvSE <- treemod$cptable[which.min(treemod$cptable[,"xerror"]), "xstd"]
+legend("topright", legend=c("random forest (m=1)",
+"random forest (m=2)",
+"random forest (m=3)",
+"random forest (m=4)",
+"random forest (m=5)",
+"random forest (m=6)",
+"random forest (m=7)",
+"random forest (m=8",
+"bagged tree (m=k)"),
+lty=1,
+col=c("green", "blue", "yellow", "cyan", "red", "purple", "orange", "beige", "hotpink"))}
+
+```
+
+
+#From this plot, we observe that the generalization error is lowest with the parameter mtry being 1 or 2 and that it stabilizes at around 350 bootstrap samples in the respective random forests, but they go back and forth on which one has smaller generalization error.
+
+
+```{r}
+(2)
+set.seed(24601 + 5150)
+# Use the tuneRF function
+RFtune <- tuneRF(y = ozone.df$O3,                      
+                 x = ozone.df[, -which(names(ozone.df) == "O3")],
+                 mtryStart = 3,                        
+                 stepFactor = 2,                    
+                 improve = 0,                          
+                 ntreeTry = 500,
+                 trace = TRUE)
+# Print the results
+print(RFtune)
+```
+
+
+#From this plot, we observe that tuneRF has indeed suggested a best mtry parameter of 1, with mtry=2 fairly close behind in second place.
+
+
+```{r}
+(3)
+set.seed(8675309)
+b2k_RFmod2 <- randomForest(O3 ~ .,
+data=ozone.df,
+importance=TRUE,
+type="regression",
+mtry=2,
+ntree=2000)
+importance(b2k_RFmod2, type=1, scale=FALSE)
+varImpPlot(b2k_RFmod2, type=1, scale=FALSE, main="Permutation Importance")
+```
+
+
+#From this plot, we observe that the two most salient factors measured by Permutation Importance are ibt and temp.
+
+
+```{r}
+(4)
+median <- t(data.frame(apply(ozone.df, 2, median)))
+pred <- predict(b2k_RFmod2, newdata=median, predict.all=TRUE)
+interval_high <- quantile(pred$individual, 0.975)
+interval_low <- quantile(pred$individual, 0.025)
+{hist(pred$individual, prob=TRUE)
+abline(v=interval_high, lty=2)
+abline(v=interval_low, lty=2)
+abline(v=pred$aggregate)}
+```
+
+#We observe that the 95% prediction interval at the median input value of our data set is (6, 20). We compare this to our aggregate prediction of 12.40155, and we observe that the aggregate prediction lies approximately in the middle of the bootstrap prediction interval.We produce a probability histogram with the bootstrap distribution of the prediction, the prediction itself and the interval bounds.
+
+
+(5)
+#Random forests do not require a separate validation set to estimate generalization errors. This is because each bootstrap sample, which constitutes about two-thirds of the data, allows the algorithm to assess the prediction error of an individual tree using out-of-bag samples. These estimates are then averaged across all trees to evaluate the overall error of the forest. Research has demonstrated that the out-of-bag estimates provide accuracy comparable to using distinct training and validation sets.
+
