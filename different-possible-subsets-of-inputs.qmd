@@ -1,0 +1,204 @@
+---
+author: 
+   name: "Abdur Raheem Mohammed"
+date: "2024-02-09"
+number-sections: true
+format: 
+    pdf: 
+        documentclass: article
+        geometry: 
+          - top=1in
+          - left=0.75in
+          - bottom=1in
+          - right=0.75in
+        include-in-header: 
+          text: 
+            \usepackage{amsmath}
+editor: source
+---
+
+```{r}
+k <- 9
+total_subsets <- 2^k
+total_subsets
+
+```
+
+
+```{r}
+
+#load the required packages
+
+library(faraway)
+library(leaps)
+
+# Load the ozone data
+data(ozone, package = "faraway")
+
+# Extract predictors and response variable
+predictors <- subset(ozone, select = -O3)
+response <- ozone$O3
+
+# Perform best subsets procedure
+best_models <- regsubsets(response ~ ., data = predictors, nvmax = 9)
+
+# Summary table for the best subsets procedure
+summary_table <- summary(best_models)
+
+# Display the summary table
+print(summary_table)
+
+
+```
+```{r}
+# Load the ozone data
+data(ozone, package = "faraway")
+
+# Extract predictors and response variable
+predictors <- subset(ozone, select = -O3)
+response <- ozone$O3
+
+# Perform best subsets procedure
+best_models <- regsubsets(response ~ ., data = predictors, nvmax = 9)
+
+# Summary table for the best subsets procedure
+summary_table <- summary(best_models)
+
+# Display the summary table
+#print(summary_table)
+
+# Extract BIC and CP values from the best models
+bic_values <- summary(best_models)$bic
+cp_values <- summary(best_models)$cp
+
+# Plot BIC vs model complexity
+plot(1:9, bic_values, type = "b", pch = 16, col = "blue",
+     xlab = "Model Complexity", ylab = "BIC Criterion",
+     main = "BIC vs Model Complexity")
+
+# Plot CP vs model complexity
+plot(1:9, cp_values, type = "b", pch = 16, col = "red",
+     xlab = "Model Complexity", ylab = "Mallow's CP Criterion",
+     main = "CP vs Model Complexity")
+
+# WHICH MODEL IS BEST IN EACH CASE ?
+
+# ANSWER- Best model according to CP criterion: The model with the smallest CP value is considered the best model according to Mallow's CP criterion.
+# Best model according to BIC criterion: The model with the smallest BIC value is considered the best model according to the Bayesian Information Criterion.
+
+# Identify the model with the smallest CP value
+best_cp_model <- which.min(cp_values)
+cat("Best Model (based on smallest CP):", best_cp_model, "\n")
+
+# DOES BIC CHOSE A LARGER OR SMALLER MODEL THAN CP ? EXPLAIN BRIEFLY.
+
+# ANSWER- To answer the question regarding whether BIC chooses a larger or smaller model than CP, we need to compare the indices of the best models obtained from BIC and CP.
+#If the best model according to BIC (identified by the smallest BIC value) has an index smaller than 5, then BIC chooses a smaller model than CP. Conversely, if the best model according to BIC has an index larger than 5, then BIC chooses a larger model than CP.
+
+```
+```{r}
+# Load required libraries
+
+library(faraway)
+library(leaps)
+
+# Load the ozone data
+data(ozone, package = "faraway")
+
+# Calculate the total number of observations
+ntot <- nrow(ozone)
+
+# Calculate the number of observations for the training set
+ntrain <- round(ntot * 0.75)
+
+# Set seed for reproducibility
+set.seed(20500 + 5150)
+
+# Calculate the number of observations for the training set
+ntrain <- round(ntot * 0.75)
+
+# Randomly select indices for the training set
+trainidx <- sample(1:ntot, size = ntrain, replace = FALSE)
+
+# Create the training dataset
+train.df <- ozone[trainidx,]
+
+# Check the dimensions of the training dataset
+dim(train.df)
+
+
+# Calculate the number of observations for the validation set
+nval <- ntot - ntrain
+
+# Create the validation dataset
+val.df <- ozone[-trainidx,]
+
+# Check the dimensions of the validation dataset
+dim(val.df)
+
+# Fit all 2^k - 1 models using regsubsets with really.big = TRUE
+all_models <- regsubsets(O3 ~ ., data = train.df, nvmax = 9, nbest = 126, really.big = TRUE)
+
+# Obtain the summary without printing
+all_models_summary <- summary(all_models)
+
+# Check the length of the BIC list component
+bic_length <- length(all_models_summary$bic)
+cat("Length of BIC list component:", bic_length, "\n")
+
+# Check the expected length of the BIC list component
+expected_bic_length <- 2^9 - 1
+if (bic_length == expected_bic_length) {
+  cat("Length of BIC list component matches the expected length.\n")
+} else {
+  cat("Warning: Length of BIC list component does not match the expected length.\n")
+}
+# Store the regsubsets object and its summary in a named object
+regsubsets_results <- list(regsubsets_object = all_models, summary_object = all_models_summary)
+
+```
+
+```{r}
+# Function to calculate MSE
+mse <- function(actual, predicted) {
+  mean((actual - predicted)^2)
+}
+
+# Initialize vectors to store MSE for training and validation sets
+train_mse <- numeric(9)
+val_mse <- numeric(9)
+
+# Loop over each model size
+for (i in 1:9) {
+  # Fit model to training data
+  fit <- regsubsets(O3 ~ ., data=train.df, nvmax=i)
+  model_formula <- as.formula(paste("O3 ~ ", paste(names(coef(fit, id=i))[-1], collapse=" + "), sep=""))
+  model_lm <- lm(model_formula, data=train.df)
+
+  # Predict on training and validation data
+  train_pred <- predict(model_lm, newdata=train.df)
+  val_pred <- predict(model_lm, newdata=val.df)
+
+  # Calculate and store MSE
+  train_mse[i] <- mse(train.df$O3, train_pred)
+  val_mse[i] <- mse(val.df$O3, val_pred)
+}
+
+```
+
+```{r}
+# Plot MSE vs. Model Complexity
+plot(1:9, train_mse, type="b", pch=19, col="blue", xlab="Model Complexity", ylab="MSE", main="Train vs Validation MSE")
+points(1:9, val_mse, type="b", pch=19, col="red")
+legend("topright", legend=c("Training MSE", "Validation MSE"), col=c("blue", "red"), pch=19)
+
+```
+
+```{r}
+# Identify the model with the lowest validation MSE
+best_model <- which.min(val_mse)
+cat("The best model has", best_model, "predictors based on the lowest validation MSE.\n")
+
+```
+
+
